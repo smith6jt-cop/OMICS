@@ -1,0 +1,242 @@
+# ==============================================================================
+# Continuous Integration Workflow
+# Builds and tests on Linux, Windows, and macOS
+# ==============================================================================
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'release/**'
+      - 'hotfix/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+  VULKAN_SDK_VERSION: '1.3.268.0'
+
+jobs:
+  # ============================================================================
+  # Linux Build
+  # ============================================================================
+  build-linux:
+    name: Linux (${{ matrix.compiler }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            cc: gcc-12
+            cxx: g++-12
+          - compiler: clang
+            cc: clang-14
+            cxx: clang++-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libgl1-mesa-dev
+
+      - name: Install Vulkan SDK
+        run: |
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update
+          sudo apt-get install -y vulkan-sdk
+
+      - name: Configure CMake
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cellular-threshold-linux-${{ matrix.compiler }}
+          path: |
+            build/bin/CellularThreshold
+            build/bin/shaders/*.spv
+          retention-days: 7
+
+  # ============================================================================
+  # Windows Build
+  # ============================================================================
+  build-windows:
+    name: Windows (MSVC)
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.1.1
+        with:
+          version: ${{ env.VULKAN_SDK_VERSION }}
+          cache: true
+
+      - name: Configure CMake
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cellular-threshold-windows
+          path: |
+            build/bin/${{ env.BUILD_TYPE }}/CellularThreshold.exe
+            build/bin/shaders/*.spv
+          retention-days: 7
+
+  # ============================================================================
+  # macOS Build
+  # ============================================================================
+  build-macos:
+    name: macOS (Clang)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.1.1
+        with:
+          version: ${{ env.VULKAN_SDK_VERSION }}
+          cache: true
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cellular-threshold-macos
+          path: |
+            build/bin/CellularThreshold
+            build/bin/shaders/*.spv
+          retention-days: 7
+
+  # ============================================================================
+  # Shader Validation
+  # ============================================================================
+  validate-shaders:
+    name: Validate Shaders
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Vulkan SDK
+        run: |
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update
+          sudo apt-get install -y vulkan-sdk
+
+      - name: Validate GLSL shaders
+        run: |
+          echo "Validating shaders..."
+          for shader in shaders/*.vert shaders/*.frag; do
+            if [ -f "$shader" ]; then
+              echo "Compiling: $shader"
+              glslc --target-env=vulkan1.3 -Werror "$shader" -o /dev/null
+            fi
+          done
+          echo "All shaders validated successfully!"
+
+  # ============================================================================
+  # Code Quality
+  # ============================================================================
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check line endings
+        run: |
+          if find . -name "*.cpp" -o -name "*.h" -o -name "*.cmake" | xargs file | grep -q CRLF; then
+            echo "Error: Found files with CRLF line endings"
+            exit 1
+          fi
+
+      - name: Check for trailing whitespace
+        run: |
+          if grep -rn '[[:blank:]]$' --include="*.cpp" --include="*.h" --include="*.cmake" .; then
+            echo "Warning: Found trailing whitespace"
+          fi
+
+  # ============================================================================
+  # Build Status Summary
+  # ============================================================================
+  build-summary:
+    name: Build Summary
+    needs: [build-linux, build-windows, build-macos, validate-shaders]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.build-linux.result }}" == "failure" ] || \
+             [ "${{ needs.build-windows.result }}" == "failure" ] || \
+             [ "${{ needs.build-macos.result }}" == "failure" ] || \
+             [ "${{ needs.validate-shaders.result }}" == "failure" ]; then
+            echo "One or more builds failed"
+            exit 1
+          fi
+          echo "All builds completed successfully!"

@@ -1,10 +1,22 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(CellularThreshold 
-    VERSION 0.1.0 
+# ==============================================================================
+# Version Management
+# ==============================================================================
+# Read version from VERSION file (can be overridden by CT_VERSION for CI)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(VersionManagement)
+configure_project_version()
+
+project(CellularThreshold
+    VERSION ${PROJECT_VERSION}
     LANGUAGES CXX
     DESCRIPTION "Cellular biology educational game engine"
 )
+
+# Generate version header
+generate_version_header("${CMAKE_BINARY_DIR}/generated")
+get_git_info()
 
 # ==============================================================================
 # C++ Standard Configuration
@@ -97,9 +109,10 @@ add_library(engine_core STATIC
     # src/asset_pipeline/asset_importer.cpp
 )
 
-target_include_directories(engine_core 
-    PUBLIC 
+target_include_directories(engine_core
+    PUBLIC
         ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_BINARY_DIR}/generated
         ${Vulkan_INCLUDE_DIRS}
 )
 

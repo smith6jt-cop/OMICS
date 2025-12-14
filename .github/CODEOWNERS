@@ -1,0 +1,29 @@
+# Code Owners for Cellular Threshold Engine
+# These owners will be requested for review when PRs touch their areas
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything
+*                           @smith6jt-cop
+
+# Core engine systems
+/src/core/                  @smith6jt-cop
+
+# Rendering subsystem
+/src/rendering/             @smith6jt-cop
+
+# Shaders require careful review
+/shaders/                   @smith6jt-cop
+
+# Build system changes
+/CMakeLists.txt             @smith6jt-cop
+/cmake/                     @smith6jt-cop
+
+# CI/CD configuration
+/.github/workflows/         @smith6jt-cop
+
+# Documentation
+/docs/                      @smith6jt-cop
+*.md                        @smith6jt-cop
+
+# Third-party dependency updates
+/third_party/               @smith6jt-cop

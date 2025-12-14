@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/smith6jt-cop/OMICS/blob/main/CLAUDE.md
+    about: Check the development guide for answers
+  - name: Discussions
+    url: https://github.com/smith6jt-cop/OMICS/discussions
+    about: Ask questions and discuss ideas
